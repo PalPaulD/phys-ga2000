@@ -1,0 +1,19 @@
+import numpy as np
+import time
+
+start_time = time.time()
+L = 100
+
+V = 0
+#np.seterr(all = 'raise')     #if you want to use np.sqrt(...) instead of **(1/2), you have to turn on this
+                              #otherwise try will not catch a numpy warning as an error
+for i in range(-L,L+1):        
+    for j in range(-L,L+1):
+        for k in range(-L, L+1):
+            try:
+                V = V + (-1)**(i+j+k)/(i*i+j*j+k*k)**(1/2)
+                #V = V + (-1)**(i+j+k)/np.sqrt(i*i+j*j+k*k)    #it is muuuuuuuuch slower (~3 times slower than **(1/2))
+            except:
+                continue
+
+print('Madelung constant: {}, execution time: {} seconds'.format(V, round(time.time() - start_time, 2)))
