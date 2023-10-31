@@ -1,0 +1,178 @@
+import astropy.io.fits as read
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+
+def RMSE(a, b):
+    return np.sqrt(np.sum(a*a + b*b)/np.sqrt(len(a)))
+
+class data_analyzer():
+
+    def __init__(self):
+        self.hdu_list = read.open('specgrid.fits')
+        self.logwave = self.hdu_list['LOGWAVE'].data
+        self.flux = self.hdu_list['FLUX'].data
+        print('The length of the data set if {}'.format(len(self.flux)))
+        print('For each galaxy there are N_gal = {} data points'.format(len(self.flux[0])))
+
+    def check_lengths(self):
+        L = len(self.flux[0])
+        for i in range(1, len(self.flux)):
+            if len(self.flux[i])!=L:
+                print('Different number of data points for each galaxy!')
+                break
+        print('The number of data points for each galaxy is the same!')
+
+
+    def plot_some_galaxies(self, galaxies_numbers, save = False):
+        filename = 'hw6_#{}_galaxy_spectrum.png'
+        for i in galaxies_numbers:
+            plt.plot(self.logwave, self.flux[i-1])
+            plt.title('Spectrum of galaxy #{} in the data set'.format(i))
+            plt.xlabel('$\log_{10} \lambda$, Angstroms')
+            plt.ylabel('flux, $10^{-17}$ ergs s$^{-1}$ cm$^{-2}$ A$^{-1}$')
+            plt.grid()
+            if save==True:
+                plt.savefig(filename.format(i   ))
+            else:
+                plt.show()
+            plt.clf()
+
+    def normalizations(self):
+        flux_sum = np.sum(self.flux, axis = 1)
+        self.flux = self.flux/np.tile(flux_sum, (np.shape(self.flux)[1], 1)).T
+
+    def mean_subtraction(self):
+        means_normalized = np.mean(self.flux, axis = 1)
+        self.flux = self.flux - np.tile(means_normalized, (np.shape(self.flux)[1], 1)).T
+
+    def Cov_matrix_eig(self, save_plots = False):
+        start_time = time.time()
+        corr = self.flux.T@self.flux
+        eigs = np.linalg.eig(corr)
+        arg = np.argsort(eigs[0])[::-1]
+        self.eig_vectors = eigs[1][:, arg]      #sorted eigenvectors
+        self.eig_values = eigs[0][arg]          #sorted eigenvalues
+        end_time = time.time()
+
+        print('Time spent on linalg method: {} seconds'.format(end_time-start_time))
+        print('The condition number of linalg method is {}'.format(max(np.abs(self.eig_values))/min(np.abs(self.eig_values))))
+
+        filename = 'hw6_#{}_eig_vect.png'
+        for i in range(0, 5):
+            plt.plot(self.logwave, self.eig_vectors[i])
+            plt.title('Eigenvector #{} of the covariance matrix'.format(i+1))
+            plt.xlabel('$\log_{10} \lambda$, Angstroms')
+            plt.ylabel('flux, $10^{-17}$ ergs s$^{-1}$ cm$^{-2}$ A$^{-1}$')
+            plt.grid()
+            if save_plots==True:
+                plt.savefig(filename.format(i+1))
+            else:
+                plt.show()
+            plt.clf()
+
+    def eig_vect_from_R(self, save_plots = False):                      #looks correct
+        start_time = time.time()
+        (U, S, Vh) = np.linalg.svd(self.flux, full_matrices = True)
+        self.eig_vectors_svd = Vh.T
+        self.eig_values_svd = S**2
+
+        svd_sort = np.argsort(self.eig_values_svd)[::-1]
+        self.eig_vectors_svd = self.eig_vectors_svd[:, svd_sort]
+        self.eig_values_svd = self.eig_values_svd[svd_sort]
+        end_time = time.time()
+
+        print('Time spent on SVD method: {} seconds'.format(end_time-start_time))
+        print('The condition number of SVD for R is {}'.format(max(np.abs(self.eig_values_svd))/min(np.abs(self.eig_values_svd))))
+
+        filename = 'hw6_#{}_eig_vect_directly.png'
+        for i in range(0, 5):
+            plt.plot(self.logwave, self.eig_vectors_svd[i])
+            plt.title('Eigenvector #{} directly from R'.format(i+1))
+            plt.xlabel('$\log_{10} \lambda$, Angstroms')
+            plt.ylabel('flux, $10^{-17}$ ergs s$^{-1}$ cm$^{-2}$ A$^{-1}$')
+            plt.grid()
+            if save_plots==True:
+                plt.savefig(filename.format(i+1))
+            else:
+                plt.show()
+            plt.clf()
+
+    def compare(self, save = False):
+        [plt.plot(self.eig_vectors_svd[:,i], self.eig_vectors[:, i], 'o') for i in range(500)]
+        plt.plot(np.linspace(-0.2, 0.2), np.linspace(-0.2, 0.2))
+        plt.xlabel('SVD eigenvectors', fontsize = 16)
+        plt.ylabel('Eig eigenvectors', fontsize = 16)
+        if save==True:
+            filename = 'eig_vectors_two_methods.png'
+            plt.savefig(filename)
+        else:
+            plt.show()
+        plt.clf()
+
+        plt.plot(self.eig_values_svd[:500], self.eig_values[:500], 'o')
+        plt.xlabel('SVD eigenvalues')
+        plt.ylabel('Eig eigenvalues')
+        plt.grid()
+        if save==True:
+            filename = 'eig_values_two_methods.png'
+            plt.savefig(filename)
+        else:
+            plt.show()
+        plt.clf()
+
+    def check_eig_values(self, save_plots = False):
+        plt.plot(self.eig_values_svd, self.eig_values, 'o')
+        plt.xlabel('SVD eigenvalues')
+        plt.ylabel('Eig eigenvalues')
+        plt.grid()
+        if save_plots==True:
+            filename = 'eigen_values_two_methods.png'
+            plt.savefig(filename)
+        else:
+            plt.show()
+        plt.clf()
+        
+    def PCA(self, l, data, project = True):
+        eigvector = self.eig_vectors[:,:l]
+        reduced_wave_length_data = np.dot(eigvector.T, self.flux.T)
+        if project==False:
+            return reduced_wave_length_data
+        else:
+            return np.dot(eigvector, reduced_wave_length_data).T
+
+data = data_analyzer()
+#data.check_lengths()
+
+galaxies_numbers_to_plot = [1, 10, 20, 30, 40, 50]
+data.plot_some_galaxies(galaxies_numbers_to_plot, save = True)     #save = True if want to save pictures
+data.normalizations()
+data.mean_subtraction()
+data.Cov_matrix_eig(save_plots = True)
+data.eig_vect_from_R(save_plots = True)
+data.compare(save = True)
+data.check_eig_values(save_plots = True)
+
+basis_vectors = [1, 2, 3, 4, 5, 10, 15, 20]
+RMSEs = []
+for i in basis_vectors:
+    approximation = data.PCA(i, data.flux)[1,:]
+    RMSEs.append(RMSE(approximation, data.flux[1,:])) 
+    plt.plot(data.logwave, approximation, label = 'l = {}'.format(i))
+    plt.plot(data.logwave, data.flux[1,:], label = 'original data')
+    plt.xlabel('rescaled flux')
+    plt.ylabel('wavelength, $A$')
+    plt.legend()
+    plt.grid()
+    filename = '{}_eigvectors.png'
+    plt.savefig(filename.format(i))
+    #plt.show()
+    plt.clf()
+
+plt.plot(basis_vectors, RMSEs)
+plt.xlabel('The amount of eigvectors taken')
+plt.ylabel('RMSE')
+plt.grid()
+plt.savefig('RMSE_vs_eigvectors.png')
+#plt.show()
+plt.clf()
