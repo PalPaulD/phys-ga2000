@@ -1,0 +1,64 @@
+import numpy as np
+from scipy import optimize
+
+def f(x):
+    return (x-0.3)**2*np.exp(x) 
+
+
+def parabolic_step(a, c, b): 
+    '''
+    Returns the left boundary, minimum of a fitted parabola and the right boundary
+    '''
+
+    #minimum of the fitted parabola
+    x = b - 1/2 * ((b-a)**2*(f(b)-f(c)) - (b-c)**2*(f(b)-f(a))) / ((b-a)*(f(b)-f(c)) - (b-c)*(f(b)-f(c)))
+    
+    #make a step and return the values of new boundaries and the minimum
+    if x>c:
+        return (c, x, b)
+    if x<c:
+        return (a, x, c)
+
+
+def golden_section_step(a, b):
+
+    #calculate x1, x2 using the golden ratio
+    section = (-1 + np.sqrt(5.))/2.
+    x1 = section*a + (1-section)*b
+    x2 = (1-section)*a + section*b
+
+    if f(x1)<f(x2):
+        return (a, x2)
+    if f(x1)>f(x2):
+        return (x1, b)
+
+
+#set up the initial values and the tolerance
+a = 0
+b = 1
+c = (a+b)/2
+eps = 10**-6
+old_a, old_b = a, b             #prepare the slots for holding the old values, so we can keep track of two steps
+
+#parabolic steps
+while (b-a)>eps:
+    new_a, new_c, new_b = parabolic_step(a, c, b)                                           #input the values from the smallest to the largest
+    if  new_c>new_b or new_a<new_b or (new_b-new_a)>(b-a) or (new_b-new_a)>(old_b-old_a):   #if any condition is violated, swap to another method
+        change_method = True                                                                #remember to swap the method
+        del(new_a, new_b, new_c)                                                            #clear memory, we are good coders 
+        break                           
+    new_a, new_b = a, b                    
+    a, c, b = new_a, new_c, new_b
+
+#swap the method (if needed) + print
+if change_method==True:
+    while(b-a)>eps:
+        a, b = golden_section_step(a, b)
+    print('The minimum with self-made Brents method is {}'.format((a+b)/2))
+else:
+    print('The minimum with self-made Brents method is {}'.format((a+b)/2))
+
+
+#minimize with scipy
+minimizer = optimize.brent(f, brack=(0,1))
+print('The minimum with scipy Brents method is {}'.format(minimizer))
